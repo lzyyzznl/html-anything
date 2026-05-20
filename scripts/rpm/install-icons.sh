@@ -8,24 +8,36 @@ set -e
 REAL_USER=""
 HOME_DIR=""
 
+# 从 /etc/passwd 获取用户家目录的函数
+get_home_dir() {
+    local user=$1
+    # 优先尝试 getent，回退到直接解析 /etc/passwd
+    local home
+    home=$(getent passwd "$user" 2>/dev/null | cut -d: -f6)
+    if [ -z "$home" ]; then
+        home=$(awk -F: -v u="$user" '$1 == u {print $6; exit}' /etc/passwd)
+    fi
+    echo "$home"
+}
+
 # 1. 优先使用 RPM spec 传递的变量
 if [ -n "$REAL_USER" ] && [ -n "$HOME_DIR" ]; then
     echo "使用 RPM spec 传递的用户信息：$REAL_USER ($HOME_DIR)"
 # 2. 尝试 TARGET_USER 变量
 elif [ -n "$TARGET_USER" ]; then
     REAL_USER="$TARGET_USER"
-    HOME_DIR=$(getent passwd "$TARGET_USER" | cut -d: -f6)
+    HOME_DIR=$(get_home_dir "$TARGET_USER")
     echo "使用 TARGET_USER: $REAL_USER ($HOME_DIR)"
 # 3. 尝试 SUDO_USER
 elif [ -n "$SUDO_USER" ]; then
     REAL_USER="$SUDO_USER"
-    HOME_DIR=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+    HOME_DIR=$(get_home_dir "$SUDO_USER")
     echo "使用 SUDO_USER: $REAL_USER ($HOME_DIR)"
 # 4. 尝试 logname
 else
     REAL_USER=$(logname 2>/dev/null || true)
     if [ -n "$REAL_USER" ]; then
-        HOME_DIR=$(getent passwd "$REAL_USER" | cut -d: -f6)
+        HOME_DIR=$(get_home_dir "$REAL_USER")
         echo "使用 logname: $REAL_USER ($HOME_DIR)"
     fi
 fi
@@ -34,7 +46,7 @@ fi
 if [ -z "$REAL_USER" ] || [ -z "$HOME_DIR" ]; then
     REAL_USER=$(awk -F: '$3 >= 1000 && $3 < 65534 {print $1; exit}' /etc/passwd)
     if [ -n "$REAL_USER" ]; then
-        HOME_DIR=$(getent passwd "$REAL_USER" | cut -d: -f6)
+        HOME_DIR=$(get_home_dir "$REAL_USER")
         echo "使用 /etc/passwd 第一个用户：$REAL_USER ($HOME_DIR)"
     fi
 fi
@@ -43,6 +55,14 @@ fi
 if [ -z "$REAL_USER" ] || [ -z "$HOME_DIR" ]; then
     echo "错误：无法确定目标用户"
     exit 1
+fi
+
+# 验证 HOME_DIR 是否有效
+if [ ! -d "$HOME_DIR" ]; then
+    echo "警告：用户目录 $HOME_DIR 不存在，尝试创建..."
+    mkdir -p "$HOME_DIR"
+    # 设置权限
+    chown "$REAL_USER:" "$HOME_DIR"
 fi
 
 # 创建用户数据目录
