@@ -4,48 +4,52 @@ set -e
 # RPM %post 脚本在 root 上下文中运行
 # 需要检测实际的目标用户
 
-# 获取当前用户（如果是 rpm 安装，可能是 root）
+# 获取目标用户 - 按优先级尝试
+REAL_USER=""
+HOME_DIR=""
+
+# 1. 首先尝试 SUDO_USER
 if [ -n "$SUDO_USER" ]; then
     REAL_USER="$SUDO_USER"
     HOME_DIR=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-elif [ "$USER" != "root" ] && [ -n "$USER" ]; then
-    REAL_USER="$USER"
-    HOME_DIR="$HOME"
-else
-    # RPM 安装时，尝试从环境变量或系统获取
-    # 尝试 PKG_USER 环境变量（由 RPM 传递）
-    if [ -n "$PKG_USER" ]; then
-        REAL_USER="$PKG_USER"
-        HOME_DIR=$(getent passwd "$PKG_USER" | cut -d: -f6)
-    else
-        # 尝试从 /proc/1/environ 或最后一个登录用户获取
-        # 最简单的方式：使用系统上第一个非 root 的交互式用户
-        # 在桌面环境中，通常是活动会话的用户
-        REAL_USER=$(logname 2>/dev/null || true)
-        if [ -n "$REAL_USER" ]; then
-            HOME_DIR=$(getent passwd "$REAL_USER" | cut -d: -f6)
-        fi
-    fi
 fi
 
-# 如果仍然无法确定用户，使用默认值并警告
-if [ -z "$HOME_DIR" ] || [ -z "$REAL_USER" ]; then
-    echo "警告：无法确定目标用户，使用默认用户 $SUDO_USER 或 $USER"
-    if [ -n "$SUDO_USER" ]; then
-        REAL_USER="$SUDO_USER"
-        HOME_DIR=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-    else
-        # 最后手段：假设用户名为当前登录的第一个用户
-        REAL_USER=$(awk -F: '$3 >= 1000 && $3 < 65534 {print $1; exit}' /etc/passwd)
+# 2. 如果不是 sudo 安装，尝试 logname
+if [ -z "$REAL_USER" ]; then
+    REAL_USER=$(logname 2>/dev/null || true)
+    if [ -n "$REAL_USER" ]; then
         HOME_DIR=$(getent passwd "$REAL_USER" | cut -d: -f6)
     fi
 fi
 
-# 验证 HOME_DIR 是否存在
-if [ ! -d "$HOME_DIR" ]; then
-    echo "警告：用户目录 $HOME_DIR 不存在，尝试创建..."
-    mkdir -p "$HOME_DIR"
+# 3. 尝试 /etc/passwd 中第一个普通用户（UID >= 1000）
+if [ -z "$REAL_USER" ]; then
+    REAL_USER=$(awk -F: '$3 >= 1000 && $3 < 65534 {print $1; exit}' /etc/passwd)
+    if [ -n "$REAL_USER" ]; then
+        HOME_DIR=$(getent passwd "$REAL_USER" | cut -d: -f6)
+    fi
 fi
+
+# 4. 最后手段：使用 $USER 和 $HOME
+if [ -z "$REAL_USER" ] || [ -z "$HOME_DIR" ]; then
+    REAL_USER="${USER:-root}"
+    HOME_DIR="${HOME:-/root}"
+fi
+
+# 验证 HOME_DIR 是否有效
+if [ ! -d "$HOME_DIR" ]; then
+    echo "警告：用户目录 $HOME_DIR 不存在"
+    # 尝试使用 /home/$REAL_USER
+    if [ -d "/home/$REAL_USER" ]; then
+        HOME_DIR="/home/$REAL_USER"
+        echo "使用 /home/$REAL_USER 作为家目录"
+    else
+        echo "错误：无法确定有效的用户目录"
+        exit 1
+    fi
+fi
+
+echo "安装到用户：$REAL_USER ($HOME_DIR)"
 
 # 创建用户数据目录
 mkdir -p "$HOME_DIR/.local/share/html-anything"
