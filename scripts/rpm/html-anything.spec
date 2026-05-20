@@ -50,7 +50,16 @@ fi
 
 %post
 # 安装后执行
-/opt/html-anything/install-icons.sh
+# 获取第一个非 root 的普通用户（UID >= 1000）
+TARGET_USER=$(awk -F: '$3 >= 1000 && $3 < 65534 {print $1; exit}' /etc/passwd)
+if [ -n "$TARGET_USER" ]; then
+    export TARGET_USER
+    export HOME_DIR=$(getent passwd "$TARGET_USER" | cut -d: -f6)
+    export REAL_USER="$TARGET_USER"
+    /opt/html-anything/install-icons.sh
+else
+    echo "警告：未找到普通用户，跳过桌面集成"
+fi
 
 %files
 /opt/html-anything/

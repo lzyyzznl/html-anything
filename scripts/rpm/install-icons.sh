@@ -2,54 +2,48 @@
 set -e
 
 # RPM %post 脚本在 root 上下文中运行
-# 需要检测实际的目标用户
+# 目标用户由 spec 文件的 %post 段设置
 
-# 获取目标用户 - 按优先级尝试
+# 获取目标用户 - 优先使用 spec 传递的环境变量
 REAL_USER=""
 HOME_DIR=""
 
-# 1. 首先尝试 SUDO_USER
-if [ -n "$SUDO_USER" ]; then
+# 1. 优先使用 RPM spec 传递的变量
+if [ -n "$REAL_USER" ] && [ -n "$HOME_DIR" ]; then
+    echo "使用 RPM spec 传递的用户信息：$REAL_USER ($HOME_DIR)"
+# 2. 尝试 TARGET_USER 变量
+elif [ -n "$TARGET_USER" ]; then
+    REAL_USER="$TARGET_USER"
+    HOME_DIR=$(getent passwd "$TARGET_USER" | cut -d: -f6)
+    echo "使用 TARGET_USER: $REAL_USER ($HOME_DIR)"
+# 3. 尝试 SUDO_USER
+elif [ -n "$SUDO_USER" ]; then
     REAL_USER="$SUDO_USER"
     HOME_DIR=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-fi
-
-# 2. 如果不是 sudo 安装，尝试 logname
-if [ -z "$REAL_USER" ]; then
+    echo "使用 SUDO_USER: $REAL_USER ($HOME_DIR)"
+# 4. 尝试 logname
+else
     REAL_USER=$(logname 2>/dev/null || true)
     if [ -n "$REAL_USER" ]; then
         HOME_DIR=$(getent passwd "$REAL_USER" | cut -d: -f6)
+        echo "使用 logname: $REAL_USER ($HOME_DIR)"
     fi
 fi
 
-# 3. 尝试 /etc/passwd 中第一个普通用户（UID >= 1000）
-if [ -z "$REAL_USER" ]; then
+# 5. 最后手段：使用 /etc/passwd 中第一个普通用户
+if [ -z "$REAL_USER" ] || [ -z "$HOME_DIR" ]; then
     REAL_USER=$(awk -F: '$3 >= 1000 && $3 < 65534 {print $1; exit}' /etc/passwd)
     if [ -n "$REAL_USER" ]; then
         HOME_DIR=$(getent passwd "$REAL_USER" | cut -d: -f6)
+        echo "使用 /etc/passwd 第一个用户：$REAL_USER ($HOME_DIR)"
     fi
 fi
 
-# 4. 最后手段：使用 $USER 和 $HOME
+# 6. 最终回退
 if [ -z "$REAL_USER" ] || [ -z "$HOME_DIR" ]; then
-    REAL_USER="${USER:-root}"
-    HOME_DIR="${HOME:-/root}"
+    echo "错误：无法确定目标用户"
+    exit 1
 fi
-
-# 验证 HOME_DIR 是否有效
-if [ ! -d "$HOME_DIR" ]; then
-    echo "警告：用户目录 $HOME_DIR 不存在"
-    # 尝试使用 /home/$REAL_USER
-    if [ -d "/home/$REAL_USER" ]; then
-        HOME_DIR="/home/$REAL_USER"
-        echo "使用 /home/$REAL_USER 作为家目录"
-    else
-        echo "错误：无法确定有效的用户目录"
-        exit 1
-    fi
-fi
-
-echo "安装到用户：$REAL_USER ($HOME_DIR)"
 
 # 创建用户数据目录
 mkdir -p "$HOME_DIR/.local/share/html-anything"
