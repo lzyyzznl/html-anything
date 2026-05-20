@@ -1,0 +1,15 @@
+[Unit]
+Description=HTML Anything Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/html-anything/server
+ExecStart=/usr/bin/pnpm start
+Environment=PORT=48921
+Environment=NODE_ENV=production
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
