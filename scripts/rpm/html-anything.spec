@@ -4,7 +4,7 @@ Release:        1%{?dist}
 Summary:        HTML Anything - Web conversion tool
 License:        Apache-2.0
 URL:            https://github.com/html-anything
-BuildArch:      noarch
+# 自动检测架构（包含 node_modules 二进制文件）
 
 # 依赖
 Requires:       systemd
