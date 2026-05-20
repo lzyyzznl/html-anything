@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=html-anything
+Comment=HTML Conversion Tool
+Exec=/opt/html-anything/bin/start.sh
+Icon=html-anything
+Terminal=false
+Type=Application
+Categories=Utility;Development;
+StartupNotify=true
