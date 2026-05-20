@@ -1,14 +1,48 @@
 #!/bin/bash
 set -e
 
-# 获取当前用户
+# 从 /etc/passwd 获取用户家目录的函数
+get_home_dir() {
+    local user=$1
+    local home
+    home=$(getent passwd "$user" 2>/dev/null | cut -d: -f6)
+    if [ -z "$home" ]; then
+        home=$(awk -F: -v u="$user" '$1 == u {print $6; exit}' /etc/passwd)
+    fi
+    echo "$home"
+}
+
+# 获取当前用户 - 与 install-icons.sh 相同的逻辑
+REAL_USER=""
+HOME_DIR=""
+
+# 1. 尝试 SUDO_USER
 if [ -n "$SUDO_USER" ]; then
     REAL_USER="$SUDO_USER"
-    HOME_DIR=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-else
-    REAL_USER="$USER"
-    HOME_DIR="$HOME"
+    HOME_DIR=$(get_home_dir "$SUDO_USER")
+# 2. 尝试 logname
+elif [ "$(logname 2>/dev/null || true)" != "root" ]; then
+    REAL_USER=$(logname 2>/dev/null || true)
+    if [ -n "$REAL_USER" ]; then
+        HOME_DIR=$(get_home_dir "$REAL_USER")
+    fi
 fi
+
+# 3. 使用 /etc/passwd 中第一个普通用户
+if [ -z "$REAL_USER" ]; then
+    REAL_USER=$(awk -F: '$3 >= 1000 && $3 < 65534 {print $1; exit}' /etc/passwd)
+    if [ -n "$REAL_USER" ]; then
+        HOME_DIR=$(get_home_dir "$REAL_USER")
+    fi
+fi
+
+# 4. 回退
+if [ -z "$REAL_USER" ] || [ -z "$HOME_DIR" ]; then
+    REAL_USER="${USER:-root}"
+    HOME_DIR="${HOME:-/root}"
+fi
+
+echo "从用户 $REAL_USER ($HOME_DIR) 卸载..."
 
 # 停止服务
 systemctl --user stop html-anything.service 2>/dev/null || true
