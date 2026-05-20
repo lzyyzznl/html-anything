@@ -1,13 +1,34 @@
 #!/bin/bash
 set -e
 
+# RPM %post 脚本在 root 上下文中运行
+# 需要检测实际的目标用户
+
 # 获取当前用户（如果是 rpm 安装，可能是 root）
 if [ -n "$SUDO_USER" ]; then
     REAL_USER="$SUDO_USER"
     HOME_DIR=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-else
+elif [ "$USER" != "root" ]; then
     REAL_USER="$USER"
     HOME_DIR="$HOME"
+else
+    # RPM 安装时，尝试从环境获取或默认使用第一个普通用户
+    # 在大多数桌面环境中，使用实际登录用户
+    LOGIN_USER=$(who am i 2>/dev/null | awk '{print $1}' || true)
+    if [ -n "$LOGIN_USER" ]; then
+        REAL_USER="$LOGIN_USER"
+        HOME_DIR=$(getent passwd "$LOGIN_USER" | cut -d: -f6)
+    else
+        # 回退：使用当前用户（可能是 root）
+        REAL_USER="$USER"
+        HOME_DIR="$HOME"
+    fi
+fi
+
+# 验证 HOME_DIR 是否存在
+if [ ! -d "$HOME_DIR" ]; then
+    echo "警告：用户目录 $HOME_DIR 不存在，尝试创建..."
+    mkdir -p "$HOME_DIR"
 fi
 
 # 创建用户数据目录
