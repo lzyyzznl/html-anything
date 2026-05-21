@@ -21,10 +21,12 @@ pnpm build
 
 # Step 2: 复制构建产物到 SOURCES
 echo "[2/4] Preparing RPM sources..."
+
+# 使用 pnpm deploy 生成自包含的生产部署目录（仅生产依赖，无 symlink）
+pnpm --filter @html-anything/next deploy --prod --legacy "$RPM_SOURCES_DIR/server"
+
+# 叠加构建产物（.next 在 .gitignore 中，deploy 不会包含）
 cp -r "$NEXT_DIR/.next" "$RPM_SOURCES_DIR/server/"
-cp -r "$NEXT_DIR/node_modules" "$RPM_SOURCES_DIR/server/"
-cp "$NEXT_DIR/package.json" "$RPM_SOURCES_DIR/server/"
-cp -r "$NEXT_DIR/public" "$RPM_SOURCES_DIR/server/public/"
 
 # 复制脚本
 cp "$SCRIPT_DIR/rpm/start.sh" "$RPM_SOURCES_DIR/"

@@ -28,6 +28,7 @@ mkdir -p %{buildroot}/opt/html-anything/server
 mkdir -p %{buildroot}/opt/html-anything/bin
 
 # 复制构建后的应用
+shopt -s dotglob
 cp -r %{_topdir}/SOURCES/server/* %{buildroot}/opt/html-anything/server/
 
 # 复制脚本

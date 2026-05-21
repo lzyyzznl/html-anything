@@ -24,7 +24,7 @@ export PORT=$PORT
 export NODE_ENV=production
 
 # 后台启动 Next.js
-nohup pnpm start > "$LOG_FILE" 2>&1 &
+nohup node node_modules/next/dist/bin/next start > "$LOG_FILE" 2>&1 &
 echo $! > "$PID_FILE"
 
 echo "正在启动应用..."
